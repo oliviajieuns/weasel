@@ -20,6 +20,11 @@ AgentTrek, please refer to the official [xlang-ai/AgentTrek](https://github.com/
 repository. In the commands below, replace `path/to/train.json` with the local
 path to the downloaded training file.
 
+If you want to skip the preprocessing steps and directly use our WEASEL-selected
+training dataset, it will be available here:
+
+- WEASEL-selected AgentTrek training dataset: [weasel_agenttrek_train_10k.json](https://drive.google.com/file/d/175XAk5NyMxVDRhJUN8x72V7EOfNVWUp2/view?usp=sharing)
+
 ## 0. AXTree Pruning
 
 We use target-centered AXTree pruning before score computation. The cleaned
