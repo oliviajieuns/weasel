@@ -27,13 +27,15 @@ training dataset, it will be available here:
 
 ## 0. AXTree Pruning
 
-We use target-centered AXTree pruning before score computation. The cleaned
-pruning script will be added soon.
+We use target-centered AXTree pruning before score computation, with a
+threshold-based fallback when the action does not reference a valid bid.
 
 ```bash
 python -m weasel.prune_axtree \
   --input path/to/train.json \
-  --output path/to/train_pruned.json
+  --output path/to/train_pruned.json \
+  --window-size 60 \
+  --fallback-threshold 120
 ```
 
 ## 1. Prepare Scores
