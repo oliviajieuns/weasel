@@ -79,12 +79,12 @@ For supervised fine-tuning, we used [hiyouga/LLaMA-Factory](https://github.com/h
 After building the WEASEL-selected training file, you can use it as the training
 dataset in a LLaMA-Factory SFT run.
 
-If you want to directly use our trained model checkpoints, they will be available
-here:
+If you want to directly use our trained model checkpoints, they are available in
+the [WEASEL Hugging Face collection](https://huggingface.co/collections/yeonjooooni/weasel):
 
-- Qwen2.5-7B-Instruct WEASEL checkpoint: TODO
-- Gemma3-4B-IT WEASEL checkpoint: TODO
-- Qwen3-8B WEASEL checkpoint: TODO
+- Qwen2.5-7B-Instruct WEASEL checkpoint
+- Gemma3-4B-IT WEASEL checkpoint
+- Qwen3-8B WEASEL checkpoint
 
 ## Evaluation
 
