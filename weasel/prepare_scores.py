@@ -95,6 +95,21 @@ def parse_args() -> argparse.Namespace:
         help="Include original user prompts in the goal-record output.",
     )
     parser.add_argument(
+        "--segment-by",
+        choices=["contiguous", "traj-id"],
+        default="contiguous",
+        help="How steps of one goal are split into trajectory segments. "
+        "'traj-id' additionally splits on the per-record '_traj_id' field "
+        "(weasel.convert_gemini output) so segments never span trajectories.",
+    )
+    parser.add_argument(
+        "--max-segment-size",
+        type=int,
+        default=0,
+        help="Split segments larger than this many steps into chunks, bounding "
+        "the O(n^2) pairwise BERTScore per segment. 0 disables the guard.",
+    )
+    parser.add_argument(
         "--indent",
         type=int,
         default=2,
@@ -249,7 +264,52 @@ def split_contiguous(indices: Sequence[int]) -> List[List[int]]:
     return segments
 
 
-def group_trajectories(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def split_by_traj_id(
+    indices: Sequence[int], data: Sequence[Dict[str, Any]]
+) -> List[List[int]]:
+    """Split contiguous runs further whenever the per-record '_traj_id' changes.
+
+    Without this, repeated submissions of the same goal that sit next to each
+    other in the dataset merge into one giant segment, and the pairwise
+    BERTScore matrix grows quadratically across unrelated trajectories.
+    Records without '_traj_id' keep the plain contiguous behavior.
+    """
+    segments: List[List[int]] = []
+    for run in split_contiguous(indices):
+        current: List[int] = []
+        current_tid: Any = None
+        for idx in run:
+            tid = data[idx].get("_traj_id") if isinstance(data[idx], dict) else None
+            if current and (tid is None or tid != current_tid):
+                if tid is None and current_tid is None:
+                    current.append(idx)
+                    continue
+                segments.append(current)
+                current = []
+            current.append(idx)
+            current_tid = tid
+        if current:
+            segments.append(current)
+    return segments
+
+
+def chunk_segments(
+    segments: List[List[int]], max_segment_size: int
+) -> List[List[int]]:
+    if max_segment_size <= 0:
+        return segments
+    chunked: List[List[int]] = []
+    for segment in segments:
+        for start in range(0, len(segment), max_segment_size):
+            chunked.append(segment[start : start + max_segment_size])
+    return chunked
+
+
+def group_trajectories(
+    data: Sequence[Dict[str, Any]],
+    segment_by: str = "contiguous",
+    max_segment_size: int = 0,
+) -> List[Dict[str, Any]]:
     goal_to_indices: Dict[str, List[int]] = defaultdict(list)
 
     for idx, item in enumerate(data):
@@ -260,11 +320,15 @@ def group_trajectories(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     trajectories: List[Dict[str, Any]] = []
     for goal, indices in goal_to_indices.items():
+        if segment_by == "traj-id":
+            segments = split_by_traj_id(sorted(indices), data)
+        else:
+            segments = split_contiguous(indices)
         trajectories.append(
             {
                 "goal": goal,
                 "dataset_indices": sorted(indices),
-                "segments": split_contiguous(indices),
+                "segments": chunk_segments(segments, max_segment_size),
             }
         )
     return trajectories
@@ -432,9 +496,18 @@ def main() -> None:
     data = load_jsonl_or_json(input_path)
     print(f"Loaded {len(data)} datapoints from {input_path}")
 
-    trajectories = group_trajectories(data)
+    trajectories = group_trajectories(
+        data,
+        segment_by=args.segment_by,
+        max_segment_size=args.max_segment_size,
+    )
     num_segments = sum(len(item["segments"]) for item in trajectories)
     print(f"Found {len(trajectories)} distinct goals and {num_segments} trajectory segments")
+    largest = max(
+        (len(seg) for item in trajectories for seg in item["segments"]),
+        default=0,
+    )
+    print(f"Largest segment: {largest} steps (pairwise scoring is O(n^2) per segment)")
 
     scorer = load_bert_scorer(args.model_type, args.device)
     per_item_scores: Dict[int, Dict[str, Any]] = {

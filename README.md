@@ -25,6 +25,37 @@ training dataset, it will be available here:
 
 - WEASEL-selected AgentTrek training dataset: [weasel_agenttrek_train_10k.json](https://drive.google.com/file/d/175XAk5NyMxVDRhJUN8x72V7EOfNVWUp2/view?usp=sharing)
 
+## Optional: Convert Gemini Function-Calling Trajectories
+
+For Gemini-style multi-harness exports (one OpenAI function-calling trajectory
+per JSONL line), `weasel.convert_gemini` rewrites them into the per-step format
+the pipeline expects. Based on a trajectory-level analysis of such an export
+(20,970 trajectories), the converter also applies three safeguards:
+
+- Trajectories without a final text answer are kept (WEASEL scores steps, not
+  answers) and tagged with `_has_final_answer` for downstream weighting.
+- Empty-goal trajectories are skipped and reported as `skipped_empty_goal`.
+- Goal normalization merges timestamp-prefixed and `User: ... Assistant: ...`
+  duplicate task variants into one trajectory group, and looping trajectories
+  (many tool calls without an answer, or the same action repeated back to back)
+  are pre-filtered via `--max-tool-calls-no-answer` / `--max-action-repeats`.
+
+```bash
+python -m weasel.convert_gemini \
+  --input path/to/gemini_per_line.jsonl \
+  --mode both \
+  --steps-output path/to/gemini_steps.jsonl \
+  --traj-output path/to/gemini_traj.jsonl \
+  --stats-output path/to/gemini_convert_stats.json
+```
+
+When scoring converted steps, pass `--segment-by traj-id --max-segment-size 64`
+to `weasel.prepare_scores` so segments never span trajectories and the pairwise
+O(n^2) BERTScore per segment stays bounded. For non-English goals, also switch
+`--model-type` to a multilingual BERTScore model. After step-level selection,
+`weasel.select_trajectories` maps selected steps back to whole trajectories for
+native function-calling training data.
+
 ## 0. AXTree Pruning
 
 We use target-centered AXTree pruning before score computation, with a
